@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nine Card Reach</title>
+<meta name="description" content="Every 9-card hand versus every target from 1 to 10,000 with + − × ÷, solved and shown as a 3D grid you can replay.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Libre+Caslon+Text:wght@400;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a dealt hand on top, a 3D field of bars (one per target) below, stats beside it. */
+:root {
+  --bg: #e7ecef;
+  --panel: #f6f8f9;
+  --ink: #1b2329;
+  --muted: #5b6770;
+  --line: #c9d2d8;
+  --bar: #2f7f86;
+  --hot: #d98a1c;
+  --red: #c42b38;
+  --card: #fffefb;
+  --card-ink: #1b2329;
+  --glow: rgba(47, 127, 134, 0.16);
+  --table: #dce6e9;
+  --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-card: "Libre Caslon Text", Georgia, serif;
+  --font-data: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171b; --panel: #182128; --ink: #e3e9ec; --muted: #8e9ba4; --line: #2a363f;
+    --bar: #3fa3a8; --hot: #f0a63a; --red: #ff5a64; --card: #f4f1ea; --card-ink: #1b2329;
+    --glow: rgba(63, 163, 168, 0.14); --table: #142027;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171b; --panel: #182128; --ink: #e3e9ec; --muted: #8e9ba4; --line: #2a363f;
+  --bar: #3fa3a8; --hot: #f0a63a; --red: #ff5a64; --card: #f4f1ea; --card-ink: #1b2329;
+  --glow: rgba(63, 163, 168, 0.14); --table: #142027;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; } /* the artifact viewer adds this; plain hosts (Vercel) need it too */
+body {
+  margin: 0;
+  background: radial-gradient(1100px 520px at 75% -120px, var(--glow), transparent 70%) no-repeat, var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 32px 56px; display: grid; gap: 20px; }
+header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 4px; }
+.title { display: grid; gap: 10px; min-width: 0; }
+.eyebrow { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.eyebrow .suits { letter-spacing: 0.3em; color: var(--ink); margin-right: 6px; }
+.eyebrow .r { color: var(--red); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(36px, 6vw, 60px); letter-spacing: -0.035em; margin: 0; line-height: 0.95; text-wrap: balance; }
+.rules { color: var(--muted); margin: 0; max-width: 64ch; font-size: 16px; }
+.rules b { color: var(--ink); font-weight: 500; }
+.gh {
+  flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--line); transition: transform .15s, border-color .15s;
+}
+.gh:hover { border-color: var(--bar); transform: translateY(-1px); }
+.gh:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+.gh svg { width: 22px; height: 22px; fill: currentColor; }
+.label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+/* Hand */
+.hand-panel {
+  display: grid; gap: 14px; padding: clamp(14px, 2vw, 22px); border-radius: 18px;
+  background: radial-gradient(120% 140% at 50% 0%, var(--glow), transparent 60%), var(--table);
+  border: 1px solid var(--line);
+}
+.hand-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; align-items: baseline; }
+.hand { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: clamp(4px, 1vw, 12px); min-height: 40px; }
+.card {
+  aspect-ratio: 5 / 7; max-width: 100%; background: var(--card); color: var(--card-ink); border-radius: clamp(4px, 0.8vw, 9px);
+  box-shadow: 0 1px 0 rgba(0,0,0,.08), 0 4px 14px rgba(0,0,0,.12); position: relative; font-family: var(--font-card);
+  display: grid; place-items: center; overflow: hidden;
+}
+.card.red { color: #c42b38; } /* card faces stay light in both themes */
+.card .corner { position: absolute; top: 6%; left: 9%; font-size: clamp(11px, 2vw, 22px); line-height: 1; font-weight: 700; text-align: center; }
+.card .corner span { display: block; font-size: 0.8em; font-weight: 400; }
+.card .pip { font-size: clamp(20px, 5vw, 58px); line-height: 1; }
+.card .val { position: absolute; bottom: 5%; right: 8%; font-family: var(--font-data); font-size: clamp(9px, 1.2vw, 12px); color: #6b747a; }
+.card.flip { animation: flip .28s ease-out; }
+@keyframes flip { from { transform: rotateY(70deg); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .card.flip { animation: none; } }
+
+/* Controls */
+.toolbar { display: grid; gap: 10px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button, .btn {
+  font: 500 14px var(--font-body); color: var(--ink); background: var(--bg); border: 0; padding: 7px 14px; cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.btn { border: 1px solid var(--line); border-radius: 8px; }
+.btn.primary { background: var(--bar); border-color: var(--bar); color: #fff; min-width: 92px; }
+button:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+button:disabled { opacity: .5; cursor: default; }
+.ctl { display: inline-flex; gap: 8px; align-items: center; }
+#speed { width: 130px; accent-color: var(--bar); }
+.speed-out { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 13px; display: inline-block; width: 14ch; }
+
+/* Stage */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; }
+@media (max-width: 860px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.view { position: relative; background: radial-gradient(90% 80% at 50% 35%, var(--panel), var(--bg)); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; min-width: 0; }
+#scene { display: block; width: 100%; height: clamp(340px, 62vh, 680px); touch-action: none; cursor: grab; }
+#scene:active { cursor: grabbing; }
+.hint { position: absolute; left: 12px; bottom: 10px; right: 12px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.status { position: absolute; inset: 0; pointer-events: none; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); }
+.status code { font-family: var(--font-data); color: var(--ink); }
+.tip {
+  position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); padding: 8px 10px; border-radius: 6px;
+  font-size: 13px; line-height: 1.35; max-width: 240px; transform: translate(12px, -110%);
+}
+.tip.flip-left { transform: translate(calc(-100% - 12px), -110%); }
+.view-reset { position: absolute; top: 10px; right: 10px; font-size: 13px; padding: 5px 12px; opacity: .85; }
+.view-reset:hover { opacity: 1; }
+.tip .n { font-family: var(--font-display); font-size: 22px; font-weight: 700; display: block; }
+aside { display: grid; gap: 16px; align-content: start; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; }
+.stat { display: grid; gap: 2px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.stat:last-child { border-bottom: 0; }
+.stat .big { font-family: var(--font-display); font-size: 28px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat .sub { color: var(--muted); font-size: 13px; }
+#sHard { color: var(--hot); }
+.scrub { display: flex; gap: 12px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+#scrub { flex: 1; min-width: 0; accent-color: var(--bar); height: 24px; cursor: pointer; }
+.scrub-out { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.legend { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.ramp { height: 10px; border-radius: 3px; background: linear-gradient(90deg, var(--bar), var(--hot)); }
+.ramp-labels { display: flex; justify-content: space-between; }
+.key { display: flex; gap: 8px; align-items: center; }
+.key i { width: 10px; height: 10px; border-radius: 2px; background: var(--red); display: inline-block; }
+.facts-panel { display: grid; gap: 16px; padding-top: 20px; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 3.5vw, 36px); letter-spacing: -0.025em; margin: 0; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; } /* 3×3 on desktop */
+.fact {
+  display: grid; gap: 10px; align-content: start; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 18px; padding: 20px; transition: transform .15s, border-color .15s;
+}
+.fact:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--tone) 45%, var(--line)); }
+@media (prefers-reduced-motion: reduce) { .fact, .gh { transition: none; } .fact:hover, .gh:hover { transform: none; } }
+.fact .fig { font-family: var(--font-display); font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--tone); }
+.fact p { margin: 0; color: var(--muted); }
+.tone-red { --tone: var(--red); } .tone-hot { --tone: var(--hot); } .tone-good { --tone: var(--bar); }
+.minis { display: grid; grid-template-columns: repeat(9, minmax(0, 28px)); gap: 4px; }
+.card.mini { border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.18); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; font-size: 12px; font-weight: 700; gap: 1px; }
+.card.mini span { font-size: 11px; font-weight: 400; }
+.show { justify-self: start; font: 500 14px var(--font-body); color: var(--tone); background: none; border: 0; padding: 2px 0; cursor: pointer; }
+.show:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Phones and narrow tablets */
+@media (max-width: 860px) {
+  aside { grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+  .stat { border-bottom: 0; padding-bottom: 0; }
+  .legend { grid-column: 1 / -1; padding-top: 12px; border-top: 1px solid var(--line); }
+}
+@media (max-width: 640px) {
+  .wrap { padding-block: 20px 40px; gap: 14px; }
+  .rules { font-size: 15px; }
+  .gh { width: 40px; height: 40px; }
+  .hand-panel { padding: 12px 10px; border-radius: 14px; }
+  .hand { gap: 4px; }
+  .card .val { display: none; }
+  .toolbar { padding: 12px; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .controls > .btn { padding-block: 10px; }
+  .ctl { grid-column: 1 / -1; justify-content: space-between; }
+  .ctl .label { min-width: 56px; }
+  .seg { flex: 1; max-width: 240px; }
+  .seg button { flex: 1; padding-block: 9px; }
+  #speed { flex: 1; width: auto; min-width: 0; }
+  .speed-out { width: 13ch; text-align: right; }
+  #scrub { height: 36px; }
+  #scene { height: min(62vh, 480px); }
+  .hint { position: static; padding: 8px 12px 10px; font-size: 12px; border-top: 1px solid var(--line); }
+  .stat .big { font-size: 24px; }
+  .facts { gap: 12px; }
+  .fact { padding: 16px; }
+  .fact .fig { font-size: 38px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">
+      <span class="eyebrow"><span class="suits">♠<span class="r">♥</span>♣<span class="r">♦</span></span>Every hand, solved</span>
+      <h1>Nine Card Reach</h1>
+      <p class="rules">You’re dealt 9 cards (A=1 … K=13). Use all nine once with <b>+ − × ÷</b>, whole numbers at every step, to hit a target. Each bar below is a target from 1 to 10,000. Its height is how many of the <b>270,270</b> possible hands can make it.</p>
+    </div>
+    <a class="gh" href="https://github.com/nathanliow/nine-card-reach" target="_blank" rel="noopener" aria-label="Source code on GitHub" title="Source code on GitHub">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+  </header>
+
+  <section class="hand-panel" aria-label="Current hand">
+    <div class="hand-head">
+      <span class="label" id="handLabel">Loading results…</span>
+    </div>
+    <div class="hand" id="hand"></div>
+  </section>
+
+  <div class="toolbar">
+    <div class="controls">
+      <button class="btn primary" id="play" type="button" disabled>Play</button>
+      <button class="btn" id="reset" type="button">Restart</button>
+      <div class="ctl"><span class="label">Targets</span>
+        <div class="seg" role="group" aria-label="Target range">
+          <button type="button" id="r1k" aria-pressed="false">1–1,000</button>
+          <button type="button" id="r10k" aria-pressed="true">1–10,000</button>
+        </div>
+      </div>
+      <div class="ctl"><label class="label" for="speed">Speed</label>
+        <input type="range" id="speed" min="0" max="100" value="20" aria-describedby="speedOut">
+        <output id="speedOut" class="speed-out" for="speed"></output>
+      </div>
+      <div class="ctl"><span class="label">Height</span>
+        <div class="seg" role="group" aria-label="Height scale">
+          <button type="button" id="hZoom" aria-pressed="true">Zoomed</button>
+          <button type="button" id="hTrue" aria-pressed="false">True</button>
+        </div>
+      </div>
+      <div class="ctl"><span class="label">Data</span>
+        <div class="seg" role="group" aria-label="Data shown">
+          <button type="button" id="dLive" aria-pressed="false">Replay</button>
+          <button type="button" id="dFinal" aria-pressed="true">All 270,270</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="scrub">
+      <input type="range" id="scrub" min="0" max="270270" value="0" step="1" aria-label="Replay position" disabled>
+      <output id="scrubOut" for="scrub" class="scrub-out">0 / 270,270</output>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="view">
+      <canvas id="scene" aria-label="3D bar grid of target numbers"></canvas>
+      <div class="status" id="status">Downloading results (6 MB)…</div>
+      <div class="tip" id="tip" hidden></div>
+      <button class="btn view-reset" id="resetView" type="button">Reset view</button>
+      <div class="hint" id="hint"></div>
+    </div>
+    <aside>
+      <div class="stat">
+        <span class="label">Hands dealt</span>
+        <span class="big" id="sDone">0</span>
+        <span class="sub" id="sRate"></span>
+      </div>
+      <div class="stat">
+        <span class="label" id="sFullLabel">Hands that make every target</span>
+        <span class="big" id="sFull">0</span>
+        <span class="sub" id="sFullPct"></span>
+      </div>
+      <div class="stat">
+        <span class="label">Hardest target</span>
+        <span class="big" id="sHard">–</span>
+        <span class="sub" id="sHardSub"></span>
+      </div>
+      <div class="stat legend">
+        <span class="label">Colour</span>
+        <div class="ramp"></div>
+        <div class="ramp-labels"><span>made by every hand</span><span>most misses</span></div>
+        <div class="key"><i></i> numbers the current hand can’t make</div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="facts-panel" aria-labelledby="factsTitle">
+    <h2 id="factsTitle">Fun facts</h2>
+    <div class="facts" id="facts"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Any startup failure (no WebGL, old browser, bad download) shows on the page instead of hanging on "Loading".
+const showError = msg => { const s = document.getElementById('status'); s.hidden = false; s.textContent = `Something went wrong: ${msg}`; };
+addEventListener('error', e => showError(e.message));
+addEventListener('unhandledrejection', e => showError(e.reason?.message ?? e.reason));
+const TOTAL = 270270, MAX_T = 10000;
+const RANGES = { r1k: { n: 1000, cols: 50 }, r10k: { n: 10000, cols: 100 } };
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('en-US');
+const RANK = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const SUITS = [['♠', false], ['♥', true], ['♣', false], ['♦', true]];
+
+// Same order the precompute used (sorted ranks, max 4 of each).
+function allHands() {
+  const out = [], h = [];
+  (function go(start) {
+    if (h.length === 9) { out.push(h.slice()); return; }
+    for (let r = start; r <= 13; r++) {
+      if (h.length >= 4 && h[h.length - 4] === r) continue;
+      h.push(r); go(r); h.pop();
+    }
+  })(1);
+  return out;
+}
+
+// ---- state ----
+let bytes, summary;              // data/misses.b64.txt (decoded), data/summary.json
+let range = RANGES.r10k, view = 'final', playing = false, handsPerSec = 1, zoomed = true;
+const replay = { misses: new Float64Array(MAX_T + 1), dealt: 0, full1k: 0, full10k: 0, hand: null, ranges: [], ptr: 0 };
+const final = { misses: new Float64Array(MAX_T + 1), full1k: 0, full10k: 0 };
+const HANDS = allHands();
+// Replay state saved every CK hands at load, so seeking deals at most CK hands.
+const CK = 5000, checkpoints = [];
+
+const varint = () => { let n = 0, s = 0, b; do { b = bytes[replay.ptr++]; n += (b & 127) * 2 ** s; s += 7; } while (b & 128); return n; };
+function dealNext() {
+  const hand = HANDS[replay.dealt];
+  const k = varint(), ranges = [];
+  let prev = 0;
+  for (let i = 0; i < k; i++) { const s = prev + varint(), len = varint(); ranges.push([s, len]); prev = s + len; }
+  for (const [s, len] of ranges) for (let t = s; t < s + len; t++) replay.misses[t]++;
+  if (!ranges.length) replay.full10k++;
+  if (!ranges.length || ranges[0][0] > 1000) replay.full1k++;
+  replay.dealt++; replay.hand = hand; replay.ranges = ranges;
+}
+function resetReplay() {
+  Object.assign(replay, { misses: new Float64Array(MAX_T + 1), dealt: 0, full1k: 0, full10k: 0, hand: null, ranges: [], ptr: 0 });
+}
+function buildCheckpoints() {
+  resetReplay();
+  for (let i = 0; i < TOTAL; i++) {
+    if (i % CK === 0) checkpoints.push({ ptr: replay.ptr, full1k: replay.full1k, full10k: replay.full10k, misses: Uint32Array.from(replay.misses) });
+    dealNext();
+  }
+  resetReplay();
+}
+// Jump so that exactly n hands have been dealt (the current hand is hand n).
+function seek(n) {
+  resetReplay();
+  if (n > 0) {
+    const c = checkpoints[Math.floor((n - 1) / CK)];
+    Object.assign(replay, { ptr: c.ptr, full1k: c.full1k, full10k: c.full10k, dealt: Math.floor((n - 1) / CK) * CK });
+    replay.misses.set(c.misses);
+    while (replay.dealt < n) dealNext();
+  }
+  if (view === 'final') setView('replay'); else render();
+}
+
+const cur = () => view === 'final'
+  ? { misses: final.misses, dealt: TOTAL, full: range.n === 1000 ? final.full1k : final.full10k }
+  : { misses: replay.misses, dealt: replay.dealt, full: range.n === 1000 ? replay.full1k : replay.full10k };
+
+// ---- hand ----
+// The nth copy of a rank in a hand gets the nth suit, so four aces show as ♠♥♣♦.
+function withSuits(hand) {
+  const seen = {};
+  return hand.map(r => { const k = seen[r] = (seen[r] ?? -1) + 1; return [r, ...SUITS[k]]; });
+}
+function drawHand() {
+  const el = $('hand');
+  // Before anything is dealt (or on the All view), preview the first hand Play will deal.
+  const dealt = view !== 'final' && replay.hand;
+  const hand = dealt ? replay.hand : HANDS[0];
+  $('handLabel').textContent = dealt ? `Hand ${fmt(replay.dealt)} of 270,270` : view === 'final' ? 'All 270,270 hands · first hand shown' : 'Up first: hand 1 of 270,270';
+  el.innerHTML = withSuits(hand).map(([r, suit, red]) => {
+    const val = r === 1 || r > 10 ? `<span class="val">=${r}</span>` : '';
+    return `<div class="card${red ? ' red' : ''}${handsPerSec > 10 ? '' : ' flip'}" aria-label="${RANK[r]}${suit}"><div class="corner">${RANK[r]}<span>${suit}</span></div><div class="pip">${suit}</div>${val}</div>`;
+  }).join('');
+}
+
+// ---- stats ----
+let rate = 0, rateMark = { t: 0, n: 0 };
+function drawStats() {
+  const v = cur();
+  $('sDone').textContent = fmt(v.dealt);
+  if (!scrubbing) $('scrub').value = view === 'final' ? 0 : replay.dealt;
+  $('scrubOut').textContent = `${fmt(view === 'final' ? 0 : replay.dealt)} / 270,270`;
+  $('sRate').textContent = view === 'final' ? 'Complete' : playing ? `${fmt(Math.round(rate))} hands/sec` : v.dealt === TOTAL ? 'Complete' : 'Paused';
+  $('sFullLabel').textContent = `Hands that make all 1–${fmt(range.n)}`;
+  $('sFull').textContent = fmt(v.full);
+  $('sFullPct').textContent = v.dealt ? `${(v.full / v.dealt * 100).toFixed(2)}% of hands dealt` : '';
+  let hard = 1;
+  for (let i = 2; i <= range.n; i++) if (v.misses[i] > v.misses[hard]) hard = i;
+  const m = v.misses[hard];
+  $('sHard').textContent = m ? fmt(hard) : '–';
+  $('sHardSub').textContent = m ? `missed by ${fmt(m)} hand${m === 1 ? '' : 's'}` : 'no misses yet';
+}
+
+// ---- 3D scene ----
+const canvas = $('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.85));
+const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(-30, 60, 40); scene.add(sun);
+
+const geo = new THREE.BoxGeometry(0.82, 1, 0.82); geo.translate(0, 0.5, 0);
+const bars = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial(), MAX_T);
+bars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(bars);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.35 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.01; scene.add(floor);
+
+const rows = () => range.n / range.cols;
+const cellPos = n => ({ x: ((n - 1) % range.cols) - (range.cols - 1) / 2, z: (rows() - 1) / 2 - Math.floor((n - 1) / range.cols) });
+const dummy = new THREE.Object3D(), colors = {}, tmp = new THREE.Color();
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['bar', 'hot', 'red', 'line']) colors[k] = new THREE.Color(cs.getPropertyValue('--' + k).trim());
+  floor.material.color = colors.line;
+}
+readColors();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); render(); });
+new MutationObserver(() => { readColors(); render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function drawBars() {
+  const v = cur(), p = v.dealt, N = range.n, H = range.cols * 0.28;
+  bars.count = N;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 1; i <= N; i++) { lo = Math.min(lo, v.misses[i]); hi = Math.max(hi, v.misses[i]); }
+  const missSet = new Set();
+  if (view === 'replay') for (const [s, len] of replay.ranges) for (let t = s; t < s + len && t <= N; t++) missSet.add(t);
+  for (let n = 1; n <= N; n++) {
+    const m = v.misses[n];
+    // zoomed: stretch between the most-missed (short) and least-missed (tall) targets in view
+    const h = !p ? 0.02 : zoomed ? 0.25 + (H - 0.25) * (hi > lo ? (hi - m) / (hi - lo) : 1) : 0.02 + H * (p - m) / TOTAL;
+    const { x, z } = cellPos(n);
+    dummy.position.set(x, 0, z); dummy.scale.set(1, h, 1); dummy.updateMatrix();
+    bars.setMatrixAt(n - 1, dummy.matrix);
+    if (missSet.has(n)) tmp.copy(colors.red);
+    else tmp.copy(colors.bar).lerp(colors.hot, hi ? Math.sqrt(m / hi) : 0);
+    bars.setColorAt(n - 1, tmp);
+  }
+  bars.instanceMatrix.needsUpdate = true;
+  if (bars.instanceColor) bars.instanceColor.needsUpdate = true;
+}
+
+// orbit camera: rotates around a target point on the floor that panning moves
+// Phones start higher and more top-down so the whole grid reads like a heatmap.
+const HOME = innerWidth < 640 ? { theta: -0.2, phi: 0.6, scale: 1.1, tx: 0, tz: 0 } : { theta: -0.35, phi: 0.95, scale: 1.25, tx: 0, tz: 0 };
+const orbit = { ...HOME };
+const coarse = matchMedia('(pointer: coarse)').matches;
+function placeCamera() {
+  const { theta, phi, tx, tz } = orbit, d = range.cols * orbit.scale * Math.max(1, 1.9 / camera.aspect); // back off on tall, narrow views so the grid fits
+  camera.position.set(tx + d * Math.sin(phi) * Math.sin(theta), d * Math.cos(phi), tz + d * Math.sin(phi) * Math.cos(theta));
+  camera.lookAt(tx, range.cols * 0.06, tz);
+}
+function layout() {
+  floor.scale.set(range.cols + 2, rows() + 2, 1);
+  const how = coarse ? 'Drag to rotate · pinch to zoom · two fingers to pan · tap a bar' : 'Drag to rotate · right-drag or shift-drag to pan · scroll to zoom · hover a bar';
+  $('hint').textContent = `${how}. Rows of ${range.cols}: 1–${range.cols} at the front, ${fmt(range.n - range.cols + 1)}–${fmt(range.n)} at the back.`;
+  placeCamera();
+}
+function resize() {
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+  camera.aspect = canvas.clientWidth / canvas.clientHeight; camera.updateProjectionMatrix();
+  placeCamera(); draw3d();
+}
+const zoomBy = f => { orbit.scale = Math.min(3, Math.max(0.2, orbit.scale * f)); };
+function rotateBy(dx, dy) {
+  orbit.theta -= dx * 0.006;
+  orbit.phi = Math.min(1.45, Math.max(0.15, orbit.phi - dy * 0.006));
+}
+// Move the target so the floor follows the pointer; kept within the grid.
+function panBy(dx, dy) {
+  const k = range.cols * orbit.scale * 0.0022, { theta } = orbit;
+  orbit.tx -= (Math.cos(theta) * dx + Math.sin(theta) * dy) * k;
+  orbit.tz -= (-Math.sin(theta) * dx + Math.cos(theta) * dy) * k;
+  orbit.tx = Math.max(-range.cols / 2, Math.min(range.cols / 2, orbit.tx));
+  orbit.tz = Math.max(-rows() / 2, Math.min(rows() / 2, orbit.tz));
+}
+function resetView() { Object.assign(orbit, HOME); placeCamera(); draw3d(); }
+
+// Pointer gestures: one pointer rotates (or pans with right button / shift), two pointers pinch-zoom and pan.
+const pointers = new Map();
+let gesture = null, moved = 0;
+const pair = () => { const [a, b] = [...pointers.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  try { canvas.setPointerCapture(e.pointerId); } catch {} // not fatal if the pointer is already gone
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) moved = 0;
+  gesture = pointers.size === 2 ? pair() : { pan: e.button === 2 || e.shiftKey };
+  $('tip').hidden = true;
+});
+canvas.addEventListener('pointermove', e => {
+  const p = pointers.get(e.pointerId);
+  if (!p) { if (e.pointerType === 'mouse') hover(e); return; }
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  moved += Math.abs(dx) + Math.abs(dy);
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2) {
+    const now = pair();
+    if (now.d > 0 && gesture.d > 0) zoomBy(gesture.d / now.d);
+    panBy(now.x - gesture.x, now.y - gesture.y);
+    gesture = now;
+  } else if (gesture.pan) panBy(dx, dy);
+  else rotateBy(dx, dy);
+  placeCamera(); draw3d();
+});
+const endPointer = e => {
+  if (!pointers.delete(e.pointerId)) return;
+  if (e.type === 'pointerup' && !pointers.size && moved < 6) hover(e); // a tap or click shows that bar
+  if (pointers.size === 1) gesture = { pan: false };
+};
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !pointers.size) { $('tip').hidden = true; hovered = 0; } });
+canvas.addEventListener('wheel', e => { e.preventDefault(); zoomBy(1 + e.deltaY * 0.001); placeCamera(); draw3d(); }, { passive: false });
+canvas.addEventListener('dblclick', resetView);
+$('resetView').onclick = resetView;
+
+// hover
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let hovered = 0, hoverXY = null;
+function hover(e) {
+  const r = canvas.getBoundingClientRect();
+  ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObject(bars)[0];
+  hovered = hit ? hit.instanceId + 1 : 0;
+  hoverXY = { x: e.clientX - r.left, y: e.clientY - r.top };
+  drawTip();
+}
+function drawTip() {
+  const tip = $('tip'), v = cur();
+  if (!hovered || hovered > range.n || !v.dealt) { tip.hidden = true; return; }
+  const missed = v.misses[hovered], made = v.dealt - missed;
+  const curMiss = view === 'replay' && replay.ranges.some(([s, len]) => hovered >= s && hovered < s + len);
+  tip.innerHTML = `<span class="n">${fmt(hovered)}</span>Made by ${fmt(made)} of ${fmt(v.dealt)} hands (${(made / v.dealt * 100).toFixed(2)}%)<br>${missed ? `Missed by ${fmt(missed)}` : 'No hand has missed it'}${curMiss ? '<br>The current hand can’t make it' : ''}`;
+  tip.style.left = hoverXY.x + 'px'; tip.style.top = hoverXY.y + 'px';
+  tip.classList.toggle('flip-left', hoverXY.x > canvas.clientWidth - 260);
+  tip.hidden = false;
+}
+
+let raf = 0;
+function draw3d() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderer.render(scene, camera); }); }
+function render() { drawHand(); drawStats(); drawBars(); drawTip(); draw3d(); }
+
+// ---- replay loop ----
+// Each frame deals however many hands the speed allows since the last frame (fractions carry over).
+let timer = 0, lastFrame = 0, owed = 0;
+function step(now) {
+  timer = 0;
+  if (!playing) return;
+  owed = Math.min(owed + handsPerSec * (now - lastFrame) / 1000, handsPerSec); // don't burst after a stall
+  lastFrame = now;
+  const t0 = performance.now();
+  let dealt = 0;
+  while (owed >= 1 && replay.dealt < TOTAL && performance.now() - t0 < 12) { dealNext(); owed--; dealt++; }
+  if (now - rateMark.t > 1000) { rate = (replay.dealt - rateMark.n) / ((now - rateMark.t) / 1000); rateMark = { t: now, n: replay.dealt }; }
+  if (replay.dealt >= TOTAL) setPlaying(false);
+  if (dealt) render();
+  if (playing) timer = requestAnimationFrame(step);
+}
+// Slider 0..100 maps logarithmically to 1..20,000 hands per second.
+function setSpeed() {
+  handsPerSec = Math.round(10 ** ($('speed').value / 100 * Math.log10(20000)));
+  $('speedOut').textContent = `${fmt(handsPerSec)} hands/s`;
+}
+
+// ---- controls ----
+function press(on, ...off) { $(on).setAttribute('aria-pressed', 'true'); for (const o of off) $(o).setAttribute('aria-pressed', 'false'); }
+function setPlaying(p) {
+  playing = p && replay.dealt < TOTAL;
+  $('play').textContent = playing ? 'Pause' : replay.dealt >= TOTAL ? 'Replay' : replay.dealt ? 'Resume' : 'Play';
+  if (playing && !timer) { lastFrame = rateMark.t = performance.now(); rateMark.n = replay.dealt; owed = 1; timer = requestAnimationFrame(step); }
+  drawStats();
+}
+function setView(v) { view = v; v === 'final' ? press('dFinal', 'dLive') : press('dLive', 'dFinal'); render(); }
+function setRange(id) { range = RANGES[id]; orbit.tx = orbit.tz = 0; press(id, id === 'r1k' ? 'r10k' : 'r1k'); hovered = 0; layout(); render(); }
+$('play').onclick = () => {
+  if (replay.dealt >= TOTAL) seek(0); // finished: start over
+  if (view === 'final') setView('replay');
+  setPlaying(!playing);
+};
+// Dragging the scrubber seeks live; playback (if on) carries on from the new spot.
+let scrubbing = false;
+$('scrub').addEventListener('pointerdown', () => { scrubbing = true; });
+$('scrub').addEventListener('pointerup', () => { scrubbing = false; });
+$('scrub').oninput = () => { seek(+$('scrub').value); setPlaying(playing); };
+$('r1k').onclick = () => setRange('r1k');
+$('r10k').onclick = () => setRange('r10k');
+$('speed').oninput = setSpeed;
+$('hZoom').onclick = () => { zoomed = true; press('hZoom', 'hTrue'); render(); };
+$('hTrue').onclick = () => { zoomed = false; press('hTrue', 'hZoom'); render(); };
+$('dLive').onclick = () => setView('replay');
+$('reset').onclick = () => { setPlaying(false); seek(0); setPlaying(true); };
+$('dFinal').onclick = () => { setPlaying(false); setView('final'); };
+
+// ---- fun facts ----
+// Found by scanning data/misses.b64.txt; `hand` is the 0-based position in allHands() order.
+// ponytail: hardcoded, so rerunning precompute.js with different limits means re-deriving these.
+const FACTS = [
+  { fig: '9,837', tone: 'red', title: 'Most red numbers', hand: 0, text: 'can’t make 9,837 of the 10,000 targets. It’s the only hand that misses 131.' },
+  { fig: '1', tone: 'hot', title: 'Fewest red numbers', hand: 1132, text: 'misses only 9,573. It’s one of 2,996 hands that miss exactly one target.' },
+  { fig: '241,441', tone: 'good', title: 'No red at all', text: 'hands (89%) make every number from 1 to 10,000.' },
+  { fig: '35', tone: 'good', title: 'Cheapest perfect hand', hand: 22087, text: 'adds up to only 35 and still makes every target.' },
+  { fig: '1,199', tone: 'hot', title: 'Biggest hand stumbles', hand: 270269, text: 'has the highest total possible (111) but misses 1,199 targets, starting at 1,229.' },
+  { fig: '8,496', tone: 'red', title: 'Worst hand without an ace', hand: 118690, text: 'misses 8,496 targets.' },
+  { fig: '715', tone: 'good', title: 'No pairs, no problem', hand: 63196, text: 'is the lowest of the 715 hands with nine different ranks, and like every one of them it makes every target.' },
+  { fig: '1–130', tone: 'good', title: 'The safe zone', text: 'Every hand makes every number up to 130. 131 is the first number any hand misses.' },
+  { fig: '62', tone: 'hot', title: 'Primes are hard', text: 'of the 100 hardest targets are prime. The hardest, 9,643, is missed by 11,242 hands.' },
+];
+const minis = hand => `<div class="minis" aria-label="${hand.map(r => RANK[r]).join(' ')}">${withSuits(hand)
+  .map(([r, suit, red]) => `<div class="card mini${red ? ' red' : ''}" aria-hidden="true">${RANK[r]}<span>${suit}</span></div>`).join('')}</div>`;
+$('facts').innerHTML = FACTS.map((f, i) => `
+  <article class="fact tone-${f.tone}">
+    <span class="label">${f.title}</span>
+    <span class="fig">${f.fig}</span>
+    ${f.hand !== undefined ? minis(HANDS[f.hand]) : ''}
+    <p>${f.hand !== undefined ? 'This hand ' : ''}${f.text}</p>
+    ${f.hand !== undefined ? `<button class="show" type="button" data-fact="${i}" disabled>Show on grid →</button>` : ''}
+  </article>`).join('');
+$('facts').addEventListener('click', e => {
+  const i = e.target.closest('[data-fact]')?.dataset.fact;
+  if (i === undefined) return;
+  setPlaying(false);
+  setRange('r10k');
+  seek(FACTS[i].hand + 1);
+  $('hand').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+});
+
+// ---- load ----
+async function load() {
+  try {
+    const [bin, sum] = await Promise.all([
+      fetch('data/misses.b64.txt').then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .then(b64 => {
+          $('status').textContent = 'Unpacking results…';
+          const bin = atob(b64), gz = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) gz[i] = bin.charCodeAt(i);
+          return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+        }),
+      fetch('data/summary.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+    ]);
+    bytes = new Uint8Array(bin); summary = sum;
+  } catch (err) {
+    $('status').innerHTML = location.protocol === 'file:'
+      ? `Couldn’t load the saved results. Serve the folder instead:<br><code>python3 -m http.server</code> then open <code>localhost:8000</code>`
+      : `Couldn’t load the saved results (${err.message}). Try reloading, or a current version of Chrome, Safari or Firefox.`;
+    return;
+  }
+  $('status').textContent = 'Preparing replay…';
+  await new Promise(r => setTimeout(r, 30)); // let that message paint (rAF can stall in hidden tabs)
+  summary.misses.forEach((m, i) => { final.misses[i + 1] = m; });
+  final.full10k = summary.fullHands;
+  final.full1k = summary.fullHands1k;
+  buildCheckpoints();
+  $('status').hidden = true;
+  $('play').disabled = $('scrub').disabled = false;
+  document.querySelectorAll('[data-fact]').forEach(b => { b.disabled = false; });
+  render();
+}
+
+new ResizeObserver(resize).observe(canvas);
+setSpeed(); layout(); resize(); render();
+load();
+</script>
+</body>
+</html>

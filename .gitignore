@@ -1,0 +1,5 @@
+data/precompute.log
+.vercel
+.DS_Store
+node_modules
+.env*
