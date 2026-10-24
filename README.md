@@ -34,6 +34,8 @@ This project solves that for **every possible 9-card hand** and **every target f
 
 The data is gzipped and base64-encoded because some static hosts only serve text files. Decoded, each hand is a varint count of missed ranges, followed by a `(gap, length)` varint pair for each range. A hand that makes everything is a single `0` byte.
 
+`probability.js` reads the saved data and writes `data/probability.csv`: for every 4-digit target (1000–9999), how many hands make it and the probability that a random 9-card deal from a full deck can make it. Hands are weighted by how many deals produce them (the product of C(4, copies) over ranks, out of C(52, 9) = 3,679,075,400 deals), so a hand like `A A A A 2 2 2 2 3` counts far less than one with nine different ranks. Run it with `node probability.js` (about a second).
+
 `index.html` is the visualization: three.js from a CDN, with no build step. It only reads the saved data and never recomputes anything.
 
 ## Reproduce it
