@@ -1,8 +1,8 @@
-// Solves all 270,270 hands for targets 1..10000 across worker threads and saves:
-//   data/misses.b64.txt - gzipped, base64 (artifact hosting only serves text types). Decoded, per hand (in allHands() order): varint #ranges, then per range varint gap, varint length
+// Solves every hand (270,270 for 9 cards) for targets 1..10000 across worker threads and saves:
+//   data/misses.b64.txt (data/misses-<cards>.b64.txt when not 9 cards) - gzipped, base64 (artifact hosting only serves text types). Decoded, per hand (in allHands() order): varint #ranges, then per range varint gap, varint length
 //                      (missed targets only; a hand that makes everything is a single 0 byte)
-//   data/summary.json - misses per target, hands that make everything
-// Usage: node precompute.js [workers]
+//   data/summary.json (data/summary-<cards>.json) - misses per target, hands that make everything
+// Usage: node precompute.js [workers] [cards]
 const { Worker, isMainThread, parentPort } = require('worker_threads');
 const fs = require('fs');
 const zlib = require('zlib');
@@ -27,8 +27,9 @@ function encodeMisses(b, out) {
 }
 
 if (isMainThread) {
-  const nWorkers = +process.argv[2] || 6;
-  const hands = [...E.allHands()];
+  const nWorkers = +process.argv[2] || 6, cards = +process.argv[3] || 9;
+  const suffix = cards === 9 ? '' : `-${cards}`;
+  const hands = [...E.allHands(cards)];
   const total = hands.length, nChunks = Math.ceil(total / CHUNK);
   const results = new Array(nChunks), missPerTarget = new Float64Array(E.TARGET + 1);
   let next = 0, doneHands = 0, fullHands = 0, fullHands1k = 0, finished = 0;
@@ -58,8 +59,8 @@ if (isMainThread) {
     worker.on('exit', () => {
       if (++finished < nWorkers) return;
       clearInterval(timer); log();
-      fs.writeFileSync(path.join(__dirname, 'data/misses.b64.txt'), zlib.gzipSync(Buffer.concat(results), { level: 9 }).toString('base64'));
-      fs.writeFileSync(path.join(__dirname, 'data/summary.json'), JSON.stringify({
+      fs.writeFileSync(path.join(__dirname, `data/misses${suffix}.b64.txt`), zlib.gzipSync(Buffer.concat(results), { level: 9 }).toString('base64'));
+      fs.writeFileSync(path.join(__dirname, `data/summary${suffix}.json`), JSON.stringify({
         hands: total, target: E.TARGET, fullHands, fullHands1k, misses: Array.from(missPerTarget.slice(1)),
       }));
       console.log(`DONE in ${((Date.now() - t0) / 60000).toFixed(1)} min; ${fullHands} hands make all 1-${E.TARGET}`);
@@ -74,7 +75,7 @@ if (isMainThread) {
     for (const hand of job.hands) {
       const counts = new Array(E.RANKS).fill(0);
       for (const c of hand) counts[c - 1]++;
-      const r = encodeMisses(E.reach(counts, 9, true), bytes);
+      const r = encodeMisses(E.reach(counts, hand.length, true), bytes);
       if (!r.length) full++;
       if (!r.length || r[0][0] > 1000) full1k++;
       ranges.push(...r);

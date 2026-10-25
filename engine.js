@@ -60,10 +60,10 @@ function reach(counts, size, isTop) {
   return r;
 }
 function coversTargets(b) { for (let i = 1; i <= TARGET; i++) if (!has(b, i)) return false; return true; }
-function* allHands() {
+function* allHands(n = 9) {
   const h = [];
   function* go(start) {
-    if (h.length === 9) { yield h.slice(); return; }
+    if (h.length === n) { yield h.slice(); return; }
     for (let r = start; r <= RANKS; r++) {
       if (h.length >= 4 && h[h.length - 4] === r) continue;
       h.push(r); yield* go(r); h.pop();
