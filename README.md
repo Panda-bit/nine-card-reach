@@ -34,7 +34,9 @@ This project solves that for **every possible 9-card hand** and **every target f
 
 The data is gzipped and base64-encoded because some static hosts only serve text files. Decoded, each hand is a varint count of missed ranges, followed by a `(gap, length)` varint pair for each range. A hand that makes everything is a single `0` byte.
 
-`probability.js` reads the saved data and writes `data/probability.csv`: for every 4-digit target (1000–9999), how many hands make it and the probability that a random 9-card deal from a full deck can make it. Hands are weighted by how many deals produce them (the product of C(4, copies) over ranks, out of C(52, 9) = 3,679,075,400 deals), so a hand like `A A A A 2 2 2 2 3` counts far less than one with nine different ranks. Run it with `node probability.js` (about a second).
+`probability.js` reads the saved data and writes `data/probability.csv`: for every 4-digit target (1000–9999), how many hands make it and the probability that a random 9-card deal from a full deck can make it. Hands are weighted by how many deals produce them (the product of C(4, copies) over ranks, out of C(52, 9) = 3,679,075,400 deals), so a hand like `A A A A 2 2 2 2 3` counts far less than one with nine different ranks. Run it with `node probability.js` (about a second). It also prints the lower (1000–4999) and upper (5000–9999) halves separately.
+
+Both scripts take a hand size. `node precompute.js 4 8` solves all 120,055 eight-card hands (about 14 min on 4 threads) into `data/misses-8.b64.txt` and `data/summary-8.json`, and `node probability.js 8` writes `data/probability-8.csv`.
 
 `index.html` is the visualization: three.js from a CDN, with no build step. It only reads the saved data and never recomputes anything.
 
